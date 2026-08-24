@@ -108,9 +108,9 @@ export default async function Home(props: any) {
                 key={movie.id}
                 className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden flex flex-col"
               >
-                {/* Fallback image just in case a movie doesn't have a poster */}
+                {/* Dynamically styled fallback poster */}
                 <img
-                  src={movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : "https://via.placeholder.com/500x750?text=No+Poster"}
+                  src={movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : "https://placehold.co/500x750/1f2937/9ca3af?text=No+Poster"}
                   alt={movie.title}
                   className="w-full h-auto object-cover aspect-[2/3]"
                 />
@@ -118,10 +118,10 @@ export default async function Home(props: any) {
                 <div className="p-5 flex-grow flex flex-col">
                   <h2 className="text-xl font-semibold mb-1">{movie.title}</h2>
                   
-                  {/* --- NEW RELEASE DATE SECTION --- */}
+                  {/* --- UPDATED RELEASE DATE LOGIC --- */}
                   <p className="text-xs font-bold text-blue-300 mb-3">
                     {movie.release_date 
-                      ? `Released: ${new Date(movie.release_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` 
+                      ? `${new Date(movie.release_date) > new Date() ? "Releasing" : "Released"}: ${new Date(movie.release_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` 
                       : "Release date unknown"}
                   </p>
 
