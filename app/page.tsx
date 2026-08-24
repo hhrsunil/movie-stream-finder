@@ -67,7 +67,7 @@ export default async function Home(props: any) {
     return (
       <main className="min-h-screen p-10 bg-gray-900 text-white">
         
-        {/* --- NEW SEARCH BAR SECTION --- */}
+        {/* --- SEARCH BAR SECTION --- */}
         <div className="max-w-3xl mx-auto mb-10">
           <h1 className="text-4xl font-bold mb-6 text-center text-blue-400">
             Movie Stream Finder
@@ -116,7 +116,15 @@ export default async function Home(props: any) {
                 />
 
                 <div className="p-5 flex-grow flex flex-col">
-                  <h2 className="text-xl font-semibold mb-2">{movie.title}</h2>
+                  <h2 className="text-xl font-semibold mb-1">{movie.title}</h2>
+                  
+                  {/* --- NEW RELEASE DATE SECTION --- */}
+                  <p className="text-xs font-bold text-blue-300 mb-3">
+                    {movie.release_date 
+                      ? `Released: ${new Date(movie.release_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` 
+                      : "Release date unknown"}
+                  </p>
+
                   <p className="text-sm text-gray-400 line-clamp-3 mb-4">
                     {movie.overview || "No description available."}
                   </p>
