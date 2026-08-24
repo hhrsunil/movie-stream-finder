@@ -1,10 +1,13 @@
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const apiKey = process.env.TMDB_API_KEY;
 
   try {
     // 1. Fetch Trending Movies
     const response = await fetch(
-      `https://api.themoviedb.org/3/trending/movie/day?api_key=${apiKey}`
+      `https://api.themoviedb.org/3/trending/movie/day?api_key=${apiKey}`,
+      { cache: "no-store" }
     );
 
     if (!response.ok) {
@@ -24,7 +27,8 @@ export default async function Home() {
     for (const movie of trendingMovies) {
       try {
         const providerRes = await fetch(
-          `https://api.themoviedb.org/3/movie/${movie.id}/watch/providers?api_key=${apiKey}`
+          `https://api.themoviedb.org/3/movie/${movie.id}/watch/providers?api_key=${apiKey}`,
+          { cache: "no-store" }
         );
         const providerData = await providerRes.json();
 
