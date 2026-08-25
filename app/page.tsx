@@ -24,11 +24,9 @@ export default async function Home(props: any) {
   const apiKey = process.env.TMDB_API_KEY;
 
   try {
-    // 1. Swap to "all" trending instead of just movies
     let endpoint = `https://api.themoviedb.org/3/trending/all/day?api_key=${apiKey}`;
 
     if (searchQuery) {
-      // 2. Swap to "multi" search to include TV shows
       endpoint = `https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(
         searchQuery
       )}&api_key=${apiKey}&include_adult=false`;
@@ -45,14 +43,12 @@ export default async function Home(props: any) {
     }
 
     const data = await response.json();
-    // 3. Filter out 'person' results (actors) so we only get media
     const fetchedItems = (data.results || []).filter((item: any) => item.media_type !== 'person');
 
     const moviesWithProviders = [];
 
     for (const item of fetchedItems) {
       try {
-        // 4. Dynamically route to either /tv/ or /movie/ for providers
         const mediaType = item.media_type || 'movie';
         
         const providerRes = await fetch(
@@ -85,8 +81,18 @@ export default async function Home(props: any) {
     return (
       <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white">
         <div className="max-w-3xl mx-auto mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold mb-6 text-center text-blue-400">
-            Stream Finder Pro
+          
+          {/* --- NEW LEVITATING HOVER HEADING --- */}
+          <h1 className="text-4xl md:text-6xl font-extrabold mb-8 text-center flex justify-center gap-3 md:gap-4 select-none">
+            <span className="text-blue-400 inline-block transition-all duration-300 hover:-translate-y-4 hover:scale-110 hover:rotate-3 hover:drop-shadow-[0_10px_15px_rgba(96,165,250,0.4)] cursor-pointer">
+              Find
+            </span>
+            <span className="text-blue-500 inline-block transition-all duration-300 hover:-translate-y-4 hover:scale-110 hover:-rotate-3 hover:drop-shadow-[0_10px_15px_rgba(59,130,246,0.4)] cursor-pointer">
+              My
+            </span>
+            <span className="text-blue-400 inline-block transition-all duration-300 hover:-translate-y-4 hover:scale-110 hover:rotate-3 hover:drop-shadow-[0_10px_15px_rgba(96,165,250,0.4)] cursor-pointer">
+              Stream
+            </span>
           </h1>
 
           <div className="flex gap-4">
@@ -111,7 +117,6 @@ export default async function Home(props: any) {
           )}
         </div>
 
-        {/* --- NEW HEADING FOR TRENDING LIST ONLY --- */}
         {!searchQuery && moviesWithProviders.length > 0 && (
           <h2 className="text-xl md:text-2xl font-bold mb-6 text-gray-300 border-b border-gray-700 pb-2">
             🔥 Top 20 Trending Worldwide
