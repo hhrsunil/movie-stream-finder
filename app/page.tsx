@@ -13,7 +13,6 @@ async function fetchSuggestions(query: string) {
     )}&api_key=${apiKey}&include_adult=false`
   );
   const data = await res.json();
-  // Filter out actors/directors, keep only movies and tv shows
   const moviesAndShows = data.results ? data.results.filter((i: any) => i.media_type !== 'person') : [];
   return moviesAndShows.slice(0, 5);
 }
@@ -81,7 +80,6 @@ export default async function Home(props: any) {
     return (
       <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white overflow-hidden">
         
-        {/* --- CUSTOM CSS FOR CONTINUOUS LEVITATION --- */}
         <style dangerouslySetInnerHTML={{
           __html: `
             @keyframes spaceFloat {
@@ -96,28 +94,23 @@ export default async function Home(props: any) {
 
         <div className="max-w-3xl mx-auto mb-10">
           
-          {/* --- INDIVIDUAL LEVITATING LETTERS WITH COMIC FONT --- */}
           <h1 
             className="text-4xl md:text-6xl font-extrabold mb-8 text-center flex justify-center select-none text-blue-400"
             style={{ fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive' }}
           >
             {"Find My Stream".split("").map((char, index) => {
-              // Handle the spaces between words
               if (char === " ") {
                 return <span key={index} className="w-3 md:w-5"></span>;
               }
               
-              // Stagger the animation delay so they float organically like a wave
               const floatDelay = `${index * 0.15}s`;
               
               return (
-                /* OUTER SPAN: Handles the continuous floating in space */
                 <span 
                   key={index} 
                   className="inline-block animate-space-float drop-shadow-[0_5px_5px_rgba(59,130,246,0.3)]" 
                   style={{ animationDelay: floatDelay }}
                 >
-                  /* INNER SPAN: Handles the wild pop effect when hovered */
                   <span className="inline-block transition-transform duration-200 hover:-translate-y-4 hover:scale-125 hover:rotate-12 hover:text-blue-200 cursor-pointer">
                     {char}
                   </span>
