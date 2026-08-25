@@ -79,20 +79,51 @@ export default async function Home(props: any) {
     }
 
     return (
-      <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white">
+      <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white overflow-hidden">
+        
+        {/* --- CUSTOM CSS FOR CONTINUOUS LEVITATION --- */}
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes spaceFloat {
+              0%, 100% { transform: translateY(0px); }
+              50% { transform: translateY(-12px); }
+            }
+            .animate-space-float {
+              animation: spaceFloat 3s ease-in-out infinite;
+            }
+          `
+        }} />
+
         <div className="max-w-3xl mx-auto mb-10">
           
-          {/* --- NEW LEVITATING HOVER HEADING --- */}
-          <h1 className="text-4xl md:text-6xl font-extrabold mb-8 text-center flex justify-center gap-3 md:gap-4 select-none">
-            <span className="text-blue-400 inline-block transition-all duration-300 hover:-translate-y-4 hover:scale-110 hover:rotate-3 hover:drop-shadow-[0_10px_15px_rgba(96,165,250,0.4)] cursor-pointer">
-              Find
-            </span>
-            <span className="text-blue-500 inline-block transition-all duration-300 hover:-translate-y-4 hover:scale-110 hover:-rotate-3 hover:drop-shadow-[0_10px_15px_rgba(59,130,246,0.4)] cursor-pointer">
-              My
-            </span>
-            <span className="text-blue-400 inline-block transition-all duration-300 hover:-translate-y-4 hover:scale-110 hover:rotate-3 hover:drop-shadow-[0_10px_15px_rgba(96,165,250,0.4)] cursor-pointer">
-              Stream
-            </span>
+          {/* --- INDIVIDUAL LEVITATING LETTERS WITH COMIC FONT --- */}
+          <h1 
+            className="text-4xl md:text-6xl font-extrabold mb-8 text-center flex justify-center select-none text-blue-400"
+            style={{ fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive' }}
+          >
+            {"Find My Stream".split("").map((char, index) => {
+              // Handle the spaces between words
+              if (char === " ") {
+                return <span key={index} className="w-3 md:w-5"></span>;
+              }
+              
+              // Stagger the animation delay so they float organically like a wave
+              const floatDelay = `${index * 0.15}s`;
+              
+              return (
+                /* OUTER SPAN: Handles the continuous floating in space */
+                <span 
+                  key={index} 
+                  className="inline-block animate-space-float drop-shadow-[0_5px_5px_rgba(59,130,246,0.3)]" 
+                  style={{ animationDelay: floatDelay }}
+                >
+                  /* INNER SPAN: Handles the wild pop effect when hovered */
+                  <span className="inline-block transition-transform duration-200 hover:-translate-y-4 hover:scale-125 hover:rotate-12 hover:text-blue-200 cursor-pointer">
+                    {char}
+                  </span>
+                </span>
+              );
+            })}
           </h1>
 
           <div className="flex gap-4">
