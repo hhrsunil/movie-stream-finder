@@ -35,7 +35,7 @@ export default async function Home(props: any) {
 
     if (!response.ok) {
       return (
-        <main className="p-10 text-white bg-gray-900 h-screen">
+        <main className="p-10 text-white bg-[#060d17] h-screen">
           API HTTP Error: {response.status}
         </main>
       );
@@ -78,92 +78,70 @@ export default async function Home(props: any) {
     }
 
     return (
-      <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white overflow-hidden">
+      <main className="min-h-screen bg-[#060d17] text-white overflow-hidden pb-20">
         
-        <style dangerouslySetInnerHTML={{
-          __html: `
-            @keyframes spaceFloat {
-              0%, 100% { transform: translateY(0px); }
-              50% { transform: translateY(-12px); }
-            }
-            .animate-space-float {
-              animation: spaceFloat 3s ease-in-out infinite;
-            }
-          `
-        }} />
+        {/* --- NEW PROFESSIONAL NAVBAR & LOGO --- */}
+        <nav className="w-full bg-[#0b1722] border-b border-gray-800 p-4 shadow-lg flex items-center justify-between">
+          <a href="/" className="flex items-center gap-2 group cursor-pointer">
+            <div className="bg-[#fbc500] p-1.5 rounded-lg group-hover:scale-110 transition-transform">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" className="w-5 h-5">
+                <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <span className="font-extrabold text-xl tracking-tight text-white">
+              Find<span className="text-[#fbc500]">My</span>Stream
+            </span>
+          </a>
+        </nav>
 
-        <div className="max-w-3xl mx-auto mb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10">
           
-          <h1 
-            className="text-4xl md:text-6xl font-extrabold mb-8 text-center flex justify-center select-none text-blue-400"
-            style={{ fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive' }}
-          >
-            {"Find My Stream".split("").map((char, index) => {
-              if (char === " ") {
-                return <span key={index} className="w-3 md:w-5"></span>;
-              }
-              
-              const floatDelay = `${index * 0.15}s`;
-              
-              return (
-                <span 
-                  key={index} 
-                  className="inline-block animate-space-float drop-shadow-[0_5px_5px_rgba(59,130,246,0.3)]" 
-                  style={{ animationDelay: floatDelay }}
-                >
-                  <span className="inline-block transition-transform duration-200 hover:-translate-y-4 hover:scale-125 hover:rotate-12 hover:text-blue-200 cursor-pointer">
-                    {char}
-                  </span>
-                </span>
-              );
-            })}
-          </h1>
-
-          <div className="flex gap-4">
-            <SearchBar
-              initialQuery={searchQuery}
-              fetchSuggestions={fetchSuggestions}
-            />
+          <div className="max-w-3xl mx-auto mb-10">
+            <div className="flex gap-4">
+              <SearchBar
+                initialQuery={searchQuery}
+                fetchSuggestions={fetchSuggestions}
+              />
+            </div>
           </div>
 
-          {searchQuery && (
-            <div className="text-center mt-4">
-              <p className="text-gray-400">
-                Showing results for "{searchQuery}"
-              </p>
-              <a
-                href="/"
-                className="text-blue-500 hover:underline text-sm mt-1 inline-block"
-              >
-                &larr; Clear search and return to Trending
-              </a>
+          {/* --- SEARCH RESULTS METADATA --- */}
+          {searchQuery ? (
+            <div className="mb-6 flex flex-col items-start border-b border-gray-800 pb-4">
+              <h1 className="text-2xl font-bold mb-2">Search results for: {searchQuery}</h1>
+              <div className="bg-[#1a242f] text-gray-300 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-700 flex items-center gap-2">
+                {moviesWithProviders.length} titles <span className="text-gray-500">sorted by Popularity</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-gray-500">
+                  <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                </svg>
+              </div>
             </div>
-          )}
-        </div>
-
-        {!searchQuery && moviesWithProviders.length > 0 && (
-          <h2 className="text-xl md:text-2xl font-bold mb-6 text-gray-300 border-b border-gray-700 pb-2">
-            🔥 Top 20 Trending Worldwide
-          </h2>
-        )}
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
-          {moviesWithProviders.length > 0 ? (
-            moviesWithProviders.map((movie: any) => (
-              <MovieCard key={movie.id} movie={movie} />
-            ))
           ) : (
-            <div className="col-span-full text-center py-20 text-gray-500">
-              No titles found. Try another search!
-            </div>
+            moviesWithProviders.length > 0 && (
+              <h2 className="text-xl md:text-2xl font-bold mb-6 text-gray-200 border-b border-gray-800 pb-2">
+                🔥 Top Trending Worldwide
+              </h2>
+            )
           )}
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+            {moviesWithProviders.length > 0 ? (
+              moviesWithProviders.map((movie: any) => (
+                <MovieCard key={movie.id} movie={movie} />
+              ))
+            ) : (
+              <div className="col-span-full text-center py-20 text-gray-500">
+                No titles found. Try adjusting your search!
+              </div>
+            )}
+          </div>
         </div>
       </main>
     );
   } catch (error) {
     console.error("--> Fetch Exception:", error);
     return (
-      <main className="p-10 text-white bg-gray-900 h-screen">
+      <main className="p-10 text-white bg-[#060d17] h-screen">
         Network fetch crashed. Check your terminal logs!
       </main>
     );
