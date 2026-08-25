@@ -1,9 +1,8 @@
 import SearchBar from "./SearchBar";
-import MovieCard from "./MovieCard"; // --- IMPORTING YOUR NEW CARD ---
+import MovieCard from "./MovieCard";
 
 export const dynamic = "force-dynamic";
 
-// Secure server action for the search bar autocomplete
 async function fetchMovieSuggestions(query: string) {
   "use server";
   if (!query) return [];
@@ -75,9 +74,9 @@ export default async function Home(props: any) {
     }
 
     return (
-      <main className="min-h-screen p-10 bg-gray-900 text-white">
+      <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white">
         <div className="max-w-3xl mx-auto mb-10">
-          <h1 className="text-4xl font-bold mb-6 text-center text-blue-400">
+          <h1 className="text-3xl md:text-4xl font-bold mb-6 text-center text-blue-400">
             Movie Stream Finder
           </h1>
 
@@ -103,13 +102,11 @@ export default async function Home(props: any) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* --- UPDATED GRID LOGIC HERE: grid-cols-2 for mobile! --- */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
           {moviesWithProviders.length > 0 ? (
             moviesWithProviders.map((movie: any) => (
-              
-              /* --- CALLING THE NEW COMPONENT HERE --- */
               <MovieCard key={movie.id} movie={movie} />
-              
             ))
           ) : (
             <div className="col-span-full text-center py-20 text-gray-500">
