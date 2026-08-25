@@ -3,17 +3,19 @@ import MovieCard from "./MovieCard";
 
 export const dynamic = "force-dynamic";
 
-async function fetchMovieSuggestions(query: string) {
+async function fetchSuggestions(query: string) {
   "use server";
   if (!query) return [];
   const apiKey = process.env.TMDB_API_KEY;
   const res = await fetch(
-    `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(
+    `https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(
       query
     )}&api_key=${apiKey}&include_adult=false`
   );
   const data = await res.json();
-  return data.results ? data.results.slice(0, 5) : [];
+  // Filter out actors/directors, keep only movies and tv shows
+  const moviesAndShows = data.results ? data.results.filter((i: any) => i.media_type !== 'person') : [];
+  return moviesAndShows.slice(0, 5);
 }
 
 export default async function Home(props: any) {
@@ -22,10 +24,12 @@ export default async function Home(props: any) {
   const apiKey = process.env.TMDB_API_KEY;
 
   try {
-    let endpoint = `https://api.themoviedb.org/3/trending/movie/day?api_key=${apiKey}`;
+    // 1. Swap to "all" trending instead of just movies
+    let endpoint = `https://api.themoviedb.org/3/trending/all/day?api_key=${apiKey}`;
 
     if (searchQuery) {
-      endpoint = `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(
+      // 2. Swap to "multi" search to include TV shows
+      endpoint = `https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(
         searchQuery
       )}&api_key=${apiKey}&include_adult=false`;
     }
@@ -41,14 +45,18 @@ export default async function Home(props: any) {
     }
 
     const data = await response.json();
-    const fetchedMovies = data.results || [];
+    // 3. Filter out 'person' results (actors) so we only get media
+    const fetchedItems = (data.results || []).filter((item: any) => item.media_type !== 'person');
 
     const moviesWithProviders = [];
 
-    for (const movie of fetchedMovies) {
+    for (const item of fetchedItems) {
       try {
+        // 4. Dynamically route to either /tv/ or /movie/ for providers
+        const mediaType = item.media_type || 'movie';
+        
         const providerRes = await fetch(
-          `https://api.themoviedb.org/3/movie/${movie.id}/watch/providers?api_key=${apiKey}`,
+          `https://api.themoviedb.org/3/${mediaType}/${item.id}/watch/providers?api_key=${apiKey}`,
           { cache: "no-store" }
         );
         const providerData = await providerRes.json();
@@ -65,11 +73,12 @@ export default async function Home(props: any) {
         );
 
         moviesWithProviders.push({
-          ...movie,
+          ...item,
+          media_type: mediaType,
           streamingPlatforms: uniqueProviders,
         });
       } catch (err) {
-        moviesWithProviders.push({ ...movie, streamingPlatforms: [] });
+        moviesWithProviders.push({ ...item, media_type: item.media_type || 'movie', streamingPlatforms: [] });
       }
     }
 
@@ -77,13 +86,13 @@ export default async function Home(props: any) {
       <main className="min-h-screen p-4 md:p-10 bg-gray-900 text-white">
         <div className="max-w-3xl mx-auto mb-10">
           <h1 className="text-3xl md:text-4xl font-bold mb-6 text-center text-blue-400">
-            Movie Stream Finder
+            Stream Finder Pro
           </h1>
 
           <div className="flex gap-4">
             <SearchBar
               initialQuery={searchQuery}
-              fetchSuggestions={fetchMovieSuggestions}
+              fetchSuggestions={fetchSuggestions}
             />
           </div>
 
@@ -102,7 +111,13 @@ export default async function Home(props: any) {
           )}
         </div>
 
-        {/* --- UPDATED GRID LOGIC HERE: grid-cols-2 for mobile! --- */}
+        {/* --- NEW HEADING FOR TRENDING LIST ONLY --- */}
+        {!searchQuery && moviesWithProviders.length > 0 && (
+          <h2 className="text-xl md:text-2xl font-bold mb-6 text-gray-300 border-b border-gray-700 pb-2">
+            🔥 Top 20 Trending Worldwide
+          </h2>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
           {moviesWithProviders.length > 0 ? (
             moviesWithProviders.map((movie: any) => (
@@ -110,7 +125,7 @@ export default async function Home(props: any) {
             ))
           ) : (
             <div className="col-span-full text-center py-20 text-gray-500">
-              No movies found. Try another search!
+              No titles found. Try another search!
             </div>
           )}
         </div>
