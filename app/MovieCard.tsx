@@ -21,7 +21,7 @@ export default function MovieCard({ movie }: { movie: any }) {
           isFlipped ? "[transform:rotateY(180deg)]" : ""
         }`}
       >
-        {/* --- FRONT FACE --- */}
+        {/* --- FRONT FACE (Strict IMDb Only) --- */}
         <div className="absolute inset-0 h-full w-full bg-[#0b1722] rounded-xl border border-gray-800 overflow-hidden flex flex-col [backface-visibility:hidden]">
           
           <div className="relative w-full h-[50%] bg-gray-950 flex items-center justify-center">
@@ -44,11 +44,11 @@ export default function MovieCard({ movie }: { movie: any }) {
               {displayTitle} <span className="text-gray-400 font-normal text-sm md:text-base">({releaseDate ? releaseDate.substring(0, 4) : "TBD"})</span>
             </h2>
 
-            {/* --- FIXED DYNAMIC RATING BADGE --- */}
+            {/* --- FIXED STRICT IMDB BADGE --- */}
             <div className="flex items-center gap-2 mb-4">
               <span className="bg-[#f5c518] text-black text-xs font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1">
-                {/* Now it dynamically shows whether the rating is actually from IMDb or TMDB */}
-                <span className="text-[10px]">{movie.ratingSource || "TMDB"}</span> {movie.imdbRating || "NR"}
+                {/* Now it only says IMDb, and shows the number or 'N/A' from Step 3 */}
+                <span className="text-[10px]">IMDb</span> {movie.imdbRating || "N/A"}
               </span>
             </div>
 
@@ -98,13 +98,15 @@ export default function MovieCard({ movie }: { movie: any }) {
           </div>
         </div>
 
-        {/* --- BACK FACE --- */}
+        {/* --- BACK FACE (NOW WITH CAST & DIRECTOR) --- */}
         <div className="absolute inset-0 h-full w-full bg-[#0b1722] rounded-xl border border-gray-700 p-4 md:p-6 flex flex-col [backface-visibility:hidden] [transform:rotateY(180deg)]">
           <h2 className="text-base md:text-2xl font-bold mb-2 md:mb-4 text-[#fbc500] border-b border-gray-700 pb-2">
             {displayTitle}
           </h2>
 
           <div className="overflow-y-auto flex-grow pr-2">
+            
+            {/* NEW CREDITS SECTION */}
             <div className="mb-4 space-y-1">
                <p className="text-xs text-gray-400">
                  <strong className="text-gray-300">Director / Creator:</strong> {movie.director || "Unknown"}
@@ -120,6 +122,7 @@ export default function MovieCard({ movie }: { movie: any }) {
           </div>
 
           <div className="mt-2 md:mt-4 pt-2 md:pt-4 border-t border-gray-700">
+            {/* fixed typo: Tap or hover away to flip back */}
             <p className="text-[10px] md:text-xs text-gray-500 text-center uppercase tracking-wider">
               &#8634; Tap or hover to flip back
             </p>

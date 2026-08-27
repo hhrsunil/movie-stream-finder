@@ -78,18 +78,18 @@ export default function SearchBar({
                     item.poster_path
                       ? `https://image.tmdb.org/t/p/w45${item.poster_path}`
                       : "https://placehold.co/45x68/1f2937/9ca3af?text=NA"
-                  }
-                  alt={displayTitle}
-                  className="w-10 h-14 object-cover rounded shadow-sm"
-                />
-                <div>
-                  <p className="font-bold text-sm">{displayTitle}</p>
-                  <p className="text-xs text-blue-300 flex gap-2">
-                    <span className="uppercase text-gray-400 font-bold">{item.media_type === 'tv' ? 'TV' : 'MOVIE'}</span>
-                    {releaseDate ? releaseDate.substring(0, 4) : "Unknown Year"}
-                  </p>
-                </div>
-              </li>
+                }
+                alt={displayTitle}
+                className="w-10 h-14 object-cover rounded shadow-sm"
+              />
+              <div>
+                <p className="font-bold text-sm">{displayTitle}</p>
+                <p className="text-xs text-blue-300 flex gap-2">
+                  <span className="uppercase text-gray-400 font-bold">{item.media_type === 'tv' ? 'TV' : 'MOVIE'}</span>
+                  {releaseDate ? releaseDate.substring(0, 4) : "Unknown Year"}
+                </p>
+              </div>
+            </li>
             )
           })}
         </ul>

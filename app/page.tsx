@@ -50,14 +50,12 @@ export default async function Home(props: any) {
       try {
         const mediaType = item.media_type || 'movie';
         
-        // 1. Fetch Details, Providers, Credits, and External IDs in one shot
         const detailsRes = await fetch(
           `https://api.themoviedb.org/3/${mediaType}/${item.id}?api_key=${apiKey}&append_to_response=watch/providers,credits,external_ids`,
           { cache: "no-store" }
         );
         const detailsData = await detailsRes.json();
         
-        // Process Providers
         const regionData = detailsData['watch/providers']?.results?.IN || {};
         const allProviders = [
           ...(regionData.flatrate || []),
@@ -68,7 +66,6 @@ export default async function Home(props: any) {
           new Map(allProviders.map((p: any) => [p.provider_id, p])).values()
         );
 
-        // Process Directors / Creators
         let director = "Unknown";
         if (mediaType === 'tv' && detailsData.created_by?.length > 0) {
            director = detailsData.created_by.map((c: any) => c.name).join(", ");
@@ -79,43 +76,31 @@ export default async function Home(props: any) {
            }
         }
         
-        // Process Cast (Top 3)
         let cast = [];
         if (detailsData.credits?.cast) {
            cast = detailsData.credits.cast.slice(0, 3).map((c: any) => c.name);
         }
         
-        // --- IMPROVED RATINGS LOGIC: IMDb and Fallback ---
+        // --- NEW STRICT LOGIC FOR IMDB RATINGS ---
         
-        // By default, we use the TMDB rating (normalized from 10 points)
-        // We set the "ratingSource" to distinguish it later
-        let imdbRating = detailsData.vote_average ? detailsData.vote_average.toFixed(1) : "NR";
-        let ratingSource = "TMDB";
-        
+        // We default the rating to "N/A". If we can't find a real IMDb one, this is what displays.
+        let imdbRating = "N/A";
         const imdbId = detailsData.external_ids?.imdb_id;
         const omdbKey = process.env.OMDB_API_KEY; 
-
-        if (omdbKey) {
-          if (imdbId) {
+        
+        if (imdbId && omdbKey) {
             try {
-              const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${omdbKey}`);
-              const omdbData = await omdbRes.json();
-              if (omdbData.imdbRating && omdbData.imdbRating !== "N/A") {
-                // If OMDb has a valid IMDb rating, it overwrites the TMDB one
-                imdbRating = omdbData.imdbRating;
-                ratingSource = "IMDb";
-              } else {
-                console.log(`--> [NR Fallback] OMDb key is valid, but no IMDb rating found for title: "${detailsData.title || detailsData.name}" (IMDb ID: ${imdbId}). OMDb might have old cache.`);
-              }
+                const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${omdbKey}`);
+                const omdbData = await omdbRes.json();
+                if (omdbData.imdbRating && omdbData.imdbRating !== "N/A") {
+                    // Only if OMDb gives a real score, do we use it.
+                    imdbRating = omdbData.imdbRating;
+                }
             } catch(e) {
-              console.error(`--> [OMDb Error] Failed to fetch rating from OMDb for IMDb ID: ${imdbId}`);
+                console.error("OMDb fetch failed");
             }
-          } else {
-            console.log(`--> [NR Fallback] OMDb key is valid, but no IMDb ID found from TMDB for title: "${detailsData.title || detailsData.name}"`);
-          }
-        } else {
-            console.warn(`--> [OMDb Warn] No OMDB_API_KEY found in environment variables. All ratings will fall back to TMDB. Add it in Vercel to get real IMDb ratings!`);
         }
+        // We do NOT use tmdb's vote_average as a fallback. 
 
         moviesWithProviders.push({
           ...item,
@@ -123,8 +108,7 @@ export default async function Home(props: any) {
           streamingPlatforms: uniqueProviders,
           director: director,
           cast: cast,
-          imdbRating: imdbRating,
-          ratingSource: ratingSource // Pass the source to the card
+          imdbRating: imdbRating
         });
       } catch (err) {
         moviesWithProviders.push({ ...item, media_type: item.media_type || 'movie', streamingPlatforms: [] });
