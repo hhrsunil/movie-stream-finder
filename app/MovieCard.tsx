@@ -44,10 +44,11 @@ export default function MovieCard({ movie }: { movie: any }) {
               {displayTitle} <span className="text-gray-400 font-normal text-sm md:text-base">({releaseDate ? releaseDate.substring(0, 4) : "TBD"})</span>
             </h2>
 
-            {/* --- NEW IMDB RATING BADGE --- */}
+            {/* --- FIXED DYNAMIC RATING BADGE --- */}
             <div className="flex items-center gap-2 mb-4">
               <span className="bg-[#f5c518] text-black text-xs font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1">
-                <span className="text-[10px]">IMDb</span> {movie.imdbRating || "NR"}
+                {/* Now it dynamically shows whether the rating is actually from IMDb or TMDB */}
+                <span className="text-[10px]">{movie.ratingSource || "TMDB"}</span> {movie.imdbRating || "NR"}
               </span>
             </div>
 
@@ -97,15 +98,13 @@ export default function MovieCard({ movie }: { movie: any }) {
           </div>
         </div>
 
-        {/* --- BACK FACE (NOW WITH CAST & DIRECTOR) --- */}
+        {/* --- BACK FACE --- */}
         <div className="absolute inset-0 h-full w-full bg-[#0b1722] rounded-xl border border-gray-700 p-4 md:p-6 flex flex-col [backface-visibility:hidden] [transform:rotateY(180deg)]">
           <h2 className="text-base md:text-2xl font-bold mb-2 md:mb-4 text-[#fbc500] border-b border-gray-700 pb-2">
             {displayTitle}
           </h2>
 
           <div className="overflow-y-auto flex-grow pr-2">
-            
-            {/* --- NEW CREDITS SECTION --- */}
             <div className="mb-4 space-y-1">
                <p className="text-xs text-gray-400">
                  <strong className="text-gray-300">Director / Creator:</strong> {movie.director || "Unknown"}
