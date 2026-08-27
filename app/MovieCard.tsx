@@ -8,9 +8,6 @@ export default function MovieCard({ movie }: { movie: any }) {
   const displayTitle = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
   const isTV = movie.media_type === 'tv';
-  
-  // Format TMDB rating to 1 decimal place (e.g., 8.4)
-  const rating = movie.vote_average ? movie.vote_average.toFixed(1) : "NR";
 
   return (
     <div
@@ -24,7 +21,7 @@ export default function MovieCard({ movie }: { movie: any }) {
           isFlipped ? "[transform:rotateY(180deg)]" : ""
         }`}
       >
-        {/* --- FRONT FACE (JustWatch Style) --- */}
+        {/* --- FRONT FACE --- */}
         <div className="absolute inset-0 h-full w-full bg-[#0b1722] rounded-xl border border-gray-800 overflow-hidden flex flex-col [backface-visibility:hidden]">
           
           <div className="relative w-full h-[50%] bg-gray-950 flex items-center justify-center">
@@ -47,10 +44,10 @@ export default function MovieCard({ movie }: { movie: any }) {
               {displayTitle} <span className="text-gray-400 font-normal text-sm md:text-base">({releaseDate ? releaseDate.substring(0, 4) : "TBD"})</span>
             </h2>
 
-            {/* Rating Badge */}
+            {/* --- NEW IMDB RATING BADGE --- */}
             <div className="flex items-center gap-2 mb-4">
               <span className="bg-[#f5c518] text-black text-xs font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1">
-                <span className="text-[10px]">TMDB</span> {rating}
+                <span className="text-[10px]">IMDb</span> {movie.imdbRating || "NR"}
               </span>
             </div>
 
@@ -58,7 +55,7 @@ export default function MovieCard({ movie }: { movie: any }) {
             <div className="mt-auto">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Watch Now</p>
               
-              {movie.streamingPlatforms.length > 0 ? (
+              {movie.streamingPlatforms?.length > 0 ? (
                 <div className="bg-[#1a242f] rounded-lg border border-gray-700 overflow-hidden">
                   <div className="bg-gray-200 text-center text-[10px] font-bold text-gray-800 py-1 uppercase tracking-widest">
                     Stream
@@ -84,7 +81,7 @@ export default function MovieCard({ movie }: { movie: any }) {
                   <p className="text-[10px] text-gray-500 mb-2">Let us notify you when you can watch it.</p>
                   <button 
                     onClick={(e) => {
-                      e.stopPropagation(); // Prevents the card from flipping when clicking the button
+                      e.stopPropagation();
                       alert(`🔔 We will notify you when "${displayTitle}" becomes available!`);
                     }}
                     className="w-full bg-[#fbc500] hover:bg-[#e0b000] text-black font-bold py-2 rounded text-sm flex justify-center items-center gap-2 transition-colors"
@@ -100,14 +97,25 @@ export default function MovieCard({ movie }: { movie: any }) {
           </div>
         </div>
 
-        {/* --- BACK FACE (FULL DESCRIPTION) --- */}
+        {/* --- BACK FACE (NOW WITH CAST & DIRECTOR) --- */}
         <div className="absolute inset-0 h-full w-full bg-[#0b1722] rounded-xl border border-gray-700 p-4 md:p-6 flex flex-col [backface-visibility:hidden] [transform:rotateY(180deg)]">
           <h2 className="text-base md:text-2xl font-bold mb-2 md:mb-4 text-[#fbc500] border-b border-gray-700 pb-2">
             {displayTitle}
           </h2>
 
           <div className="overflow-y-auto flex-grow pr-2">
-            <p className="text-xs md:text-sm text-gray-300 leading-relaxed">
+            
+            {/* --- NEW CREDITS SECTION --- */}
+            <div className="mb-4 space-y-1">
+               <p className="text-xs text-gray-400">
+                 <strong className="text-gray-300">Director / Creator:</strong> {movie.director || "Unknown"}
+               </p>
+               <p className="text-xs text-gray-400">
+                 <strong className="text-gray-300">Starring:</strong> {movie.cast && movie.cast.length > 0 ? movie.cast.join(", ") : "Unknown"}
+               </p>
+            </div>
+
+            <p className="text-xs md:text-sm text-gray-300 leading-relaxed border-t border-gray-700 pt-3">
               {movie.overview || "No description available for this title."}
             </p>
           </div>
