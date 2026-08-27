@@ -1,5 +1,6 @@
 import SearchBar from "./SearchBar";
 import MovieCard from "./MovieCard";
+import { headers } from "next/headers"; // --- 1. IMPORTING HEADERS ---
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,12 @@ export default async function Home(props: any) {
   const searchParams = await props?.searchParams;
   const searchQuery = searchParams?.q || "";
   const apiKey = process.env.TMDB_API_KEY;
+
+  // --- 2. EXTRACTING THE USER'S COUNTRY CODE ---
+  // Awaits the incoming request headers to find Vercel's geolocation tag.
+  // Falls back to "IN" during local development.
+  const headersList = await headers();
+  const userCountry = headersList.get("x-vercel-ip-country") || "IN";
 
   try {
     let endpoint = `https://api.themoviedb.org/3/trending/all/day?api_key=${apiKey}`;
@@ -56,7 +63,9 @@ export default async function Home(props: any) {
         );
         const detailsData = await detailsRes.json();
         
-        const regionData = detailsData['watch/providers']?.results?.IN || {};
+        // --- 3. DYNAMICALLY PARSING REGION ---
+        // Instead of hardcoding 'US' or 'IN', we inject the exact country code of the user visiting the site!
+        const regionData = detailsData['watch/providers']?.results?.[userCountry] || {};
         const allProviders = [
           ...(regionData.flatrate || []),
           ...(regionData.rent || []),
@@ -81,9 +90,6 @@ export default async function Home(props: any) {
            cast = detailsData.credits.cast.slice(0, 3).map((c: any) => c.name);
         }
         
-        // --- NEW STRICT LOGIC FOR IMDB RATINGS ---
-        
-        // We default the rating to "N/A". If we can't find a real IMDb one, this is what displays.
         let imdbRating = "N/A";
         const imdbId = detailsData.external_ids?.imdb_id;
         const omdbKey = process.env.OMDB_API_KEY; 
@@ -93,14 +99,12 @@ export default async function Home(props: any) {
                 const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${omdbKey}`);
                 const omdbData = await omdbRes.json();
                 if (omdbData.imdbRating && omdbData.imdbRating !== "N/A") {
-                    // Only if OMDb gives a real score, do we use it.
                     imdbRating = omdbData.imdbRating;
                 }
             } catch(e) {
                 console.error("OMDb fetch failed");
             }
         }
-        // We do NOT use tmdb's vote_average as a fallback. 
 
         moviesWithProviders.push({
           ...item,
@@ -118,18 +122,6 @@ export default async function Home(props: any) {
     return (
       <main className="min-h-screen bg-[#060d17] text-white overflow-hidden flex flex-col pb-20">
         
-        <style dangerouslySetInnerHTML={{
-          __html: `
-            @keyframes spaceFloat {
-              0%, 100% { transform: translateY(0px); }
-              50% { transform: translateY(-12px); }
-            }
-            .animate-space-float {
-              animation: spaceFloat 3s ease-in-out infinite;
-            }
-          `
-        }} />
-
         <nav className="w-full bg-[#0b1722] border-b border-gray-800 p-4 shadow-lg flex items-center justify-between">
           <a href="/" className="flex items-center gap-2 group cursor-pointer">
             <div className="bg-[#fbc500] p-1.5 rounded-lg group-hover:scale-110 transition-transform">
@@ -146,29 +138,6 @@ export default async function Home(props: any) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 flex-grow w-full">
           
           <div className="max-w-3xl mx-auto mb-10">
-            <h1 
-              className="text-4xl md:text-6xl font-extrabold mb-8 text-center flex justify-center select-none text-[#fbc500]"
-              style={{ fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive' }}
-            >
-              {"Find My Stream".split("").map((char, index) => {
-                if (char === " ") {
-                  return <span key={index} className="w-3 md:w-5"></span>;
-                }
-                const floatDelay = `${index * 0.15}s`;
-                return (
-                  <span 
-                    key={index} 
-                    className="inline-block animate-space-float drop-shadow-[0_5px_5px_rgba(251,197,0,0.3)]" 
-                    style={{ animationDelay: floatDelay }}
-                  >
-                    <span className="inline-block transition-transform duration-200 hover:-translate-y-4 hover:scale-125 hover:rotate-12 hover:text-[#ffd640] cursor-pointer">
-                      {char}
-                    </span>
-                  </span>
-                );
-              })}
-            </h1>
-
             <div className="flex gap-4">
               <SearchBar
                 initialQuery={searchQuery}
@@ -180,15 +149,27 @@ export default async function Home(props: any) {
           {searchQuery ? (
             <div className="mb-6 flex flex-col items-start border-b border-gray-800 pb-4">
               <h1 className="text-2xl font-bold mb-2">Search results for: {searchQuery}</h1>
-              <div className="bg-[#1a242f] text-gray-300 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-700 flex items-center gap-2">
-                {moviesWithProviders.length} titles <span className="text-gray-500">sorted by Popularity</span>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <div className="bg-[#1a242f] text-gray-300 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-700 flex items-center gap-2">
+                  {moviesWithProviders.length} titles <span className="text-gray-500">sorted by Popularity</span>
+                </div>
+                {/* Visual confirmation of the detected region */}
+                <div className="bg-[#1a242f] text-[#fbc500] text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-700">
+                  📍 Region: {userCountry}
+                </div>
               </div>
             </div>
           ) : (
             moviesWithProviders.length > 0 && (
-              <h2 className="text-xl md:text-2xl font-bold mb-6 text-gray-200 border-b border-gray-800 pb-2">
-                🔥 Top Trending Worldwide
-              </h2>
+              <div className="mb-6 border-b border-gray-800 pb-2 flex flex-wrap items-center justify-between">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-200">
+                  🔥 Top Trending Worldwide
+                </h2>
+                {/* Visual confirmation of the detected region */}
+                <div className="bg-[#1a242f] text-[#fbc500] text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-700 mt-2 md:mt-0">
+                  📍 Region: {userCountry}
+                </div>
+              </div>
             )
           )}
 
