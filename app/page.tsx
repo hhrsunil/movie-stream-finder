@@ -50,12 +50,14 @@ export default async function Home(props: any) {
       try {
         const mediaType = item.media_type || 'movie';
         
+        // 1. Fetch Details, Providers, Credits, and External IDs in one shot
         const detailsRes = await fetch(
           `https://api.themoviedb.org/3/${mediaType}/${item.id}?api_key=${apiKey}&append_to_response=watch/providers,credits,external_ids`,
           { cache: "no-store" }
         );
         const detailsData = await detailsRes.json();
         
+        // Process Providers
         const regionData = detailsData['watch/providers']?.results?.IN || {};
         const allProviders = [
           ...(regionData.flatrate || []),
@@ -66,6 +68,7 @@ export default async function Home(props: any) {
           new Map(allProviders.map((p: any) => [p.provider_id, p])).values()
         );
 
+        // Process Directors / Creators
         let director = "Unknown";
         if (mediaType === 'tv' && detailsData.created_by?.length > 0) {
            director = detailsData.created_by.map((c: any) => c.name).join(", ");
@@ -76,25 +79,42 @@ export default async function Home(props: any) {
            }
         }
         
+        // Process Cast (Top 3)
         let cast = [];
         if (detailsData.credits?.cast) {
            cast = detailsData.credits.cast.slice(0, 3).map((c: any) => c.name);
         }
         
-        let imdbRating = "NR";
+        // --- IMPROVED RATINGS LOGIC: IMDb and Fallback ---
+        
+        // By default, we use the TMDB rating (normalized from 10 points)
+        // We set the "ratingSource" to distinguish it later
+        let imdbRating = detailsData.vote_average ? detailsData.vote_average.toFixed(1) : "NR";
+        let ratingSource = "TMDB";
+        
         const imdbId = detailsData.external_ids?.imdb_id;
         const omdbKey = process.env.OMDB_API_KEY; 
-        
-        if (imdbId && omdbKey) {
+
+        if (omdbKey) {
+          if (imdbId) {
             try {
-                const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${omdbKey}`);
-                const omdbData = await omdbRes.json();
-                if (omdbData.imdbRating && omdbData.imdbRating !== "N/A") {
-                    imdbRating = omdbData.imdbRating;
-                }
+              const omdbRes = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${omdbKey}`);
+              const omdbData = await omdbRes.json();
+              if (omdbData.imdbRating && omdbData.imdbRating !== "N/A") {
+                // If OMDb has a valid IMDb rating, it overwrites the TMDB one
+                imdbRating = omdbData.imdbRating;
+                ratingSource = "IMDb";
+              } else {
+                console.log(`--> [NR Fallback] OMDb key is valid, but no IMDb rating found for title: "${detailsData.title || detailsData.name}" (IMDb ID: ${imdbId}). OMDb might have old cache.`);
+              }
             } catch(e) {
-                console.error("OMDb fetch failed");
+              console.error(`--> [OMDb Error] Failed to fetch rating from OMDb for IMDb ID: ${imdbId}`);
             }
+          } else {
+            console.log(`--> [NR Fallback] OMDb key is valid, but no IMDb ID found from TMDB for title: "${detailsData.title || detailsData.name}"`);
+          }
+        } else {
+            console.warn(`--> [OMDb Warn] No OMDB_API_KEY found in environment variables. All ratings will fall back to TMDB. Add it in Vercel to get real IMDb ratings!`);
         }
 
         moviesWithProviders.push({
@@ -103,7 +123,8 @@ export default async function Home(props: any) {
           streamingPlatforms: uniqueProviders,
           director: director,
           cast: cast,
-          imdbRating: imdbRating
+          imdbRating: imdbRating,
+          ratingSource: ratingSource // Pass the source to the card
         });
       } catch (err) {
         moviesWithProviders.push({ ...item, media_type: item.media_type || 'movie', streamingPlatforms: [] });
@@ -111,7 +132,7 @@ export default async function Home(props: any) {
     }
 
     return (
-      <main className="min-h-screen bg-[#060d17] text-white overflow-hidden flex flex-col">
+      <main className="min-h-screen bg-[#060d17] text-white overflow-hidden flex flex-col pb-20">
         
         <style dangerouslySetInnerHTML={{
           __html: `
@@ -200,7 +221,6 @@ export default async function Home(props: any) {
           </div>
         </div>
 
-        {/* --- SLEEK MINIMAL FOOTER --- */}
         <footer className="w-full bg-[#0b1722] border-t border-gray-800 py-8 mt-auto">
           <div className="max-w-7xl mx-auto px-4 flex flex-col items-center justify-center text-center">
             <p className="text-gray-400 text-sm md:text-base font-medium">
