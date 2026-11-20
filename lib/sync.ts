@@ -2,7 +2,7 @@ import { getLocalDB } from './db';
 import { createClient } from '@supabase/supabase-js';
 
 // We initialize this lazily inside the function to prevent crashing on load
-let supabase: ReturnType<typeof createClient> | null = null;
+let supabase: ReturnType<typeof createClient> | any = null;
 
 function getSupabaseClient() {
   if (supabase) return supabase;
@@ -15,7 +15,7 @@ function getSupabaseClient() {
     return null;
   }
   
-  supabase = createClient(supabaseUrl, supabaseKey);
+  supabase = createClient<any>(supabaseUrl, supabaseKey);
   return supabase;
 }
 
