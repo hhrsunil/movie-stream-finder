@@ -1,21 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { getLocalDB } from '@/lib/db';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  syncOfflineQueue,
-  saveSettingsToSupabase,
-  fetchSettingsFromSupabase,
-} from '@/lib/sync';
-
-interface DailyLog {
-  dateKey: string;
-  qty: number;
-  status: 'delivered' | 'leave';
-}
+  CUSTOMER_ID,
+  DailyLog,
+  MilkSettings,
+  getAllLocalLogs,
+  getLocalSettings,
+  saveLocalLog,
+  saveLocalSettings,
+} from '@/lib/db';
+import { flushSyncQueue, pullFromSupabase } from '@/lib/sync';
 
 const QUANTITIES = [1, 1.5, 2, 2.5, 3];
-const MILK_TYPES = ['Buffalo Milk', 'Cow Milk'];
+const MILK_TYPES = ['Buffalo Milk', 'Cow Milk', 'A2 Milk', 'Toned Milk'];
 
 function formatDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -34,130 +32,189 @@ function formatDisplayDate(date: Date): string {
 
 export default function MilkSubPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  const [logsMap, setLogsMap] = useState<Record<string, DailyLog>>({});
   const [selectedQty, setSelectedQty] = useState<number>(1.5);
-  const [logs, setLogs] = useState<Record<string, DailyLog>>({});
-  const [showMonthView, setShowMonthView] = useState<boolean>(false);
-
-  // Editable Price & Milk Type state
   const [pricePerLiter, setPricePerLiter] = useState<number>(74);
+  const [milkType, setMilkType] = useState<string>('Buffalo Milk');
   const [isEditingPrice, setIsEditingPrice] = useState<boolean>(false);
   const [priceInput, setPriceInput] = useState<string>('74');
-  const [milkType, setMilkType] = useState<string>('Buffalo Milk');
+  const [showMonthlyTotal, setShowMonthlyTotal] = useState<boolean>(false);
+  const [showMonthView, setShowMonthView] = useState<boolean>(false);
 
-  // Monthly Total toggle
-  const [showTotalCard, setShowTotalCard] = useState<boolean>(false);
-
-  // Touch swipe tracking
   const touchStartX = useRef<number | null>(null);
 
-  const dateKey = formatDateKey(selectedDate);
-  const currentLog = logs[dateKey];
-
-  // Load local logs + settings on mount
+  // Initial load from IndexedDB + sync with Supabase
   useEffect(() => {
     async function init() {
-      // 1. Load settings from localStorage first (instant offline)
-      const savedPrice = localStorage.getItem('milksub_price');
-      const savedType = localStorage.getItem('milksub_type');
-      if (savedPrice) {
-        const parsed = parseFloat(savedPrice);
-        if (!isNaN(parsed)) {
-          setPricePerLiter(parsed);
-          setPriceInput(String(parsed));
-        }
-      }
-      if (savedType) {
-        setMilkType(savedType);
+      const localLogs = await getAllLocalLogs();
+      const map: Record<string, DailyLog> = {};
+      localLogs.forEach((l) => {
+        map[l.date_key] = l;
+      });
+      setLogsMap(map);
+
+      const localSettings = await getLocalSettings();
+      if (localSettings) {
+        setPricePerLiter(Number(localSettings.price_per_liter));
+        setPriceInput(String(localSettings.price_per_liter));
+        setMilkType(localSettings.milk_type);
       }
 
-      // 2. Load logs from IndexedDB
-      try {
-        const db = await getLocalDB();
-        const allLogs: DailyLog[] = await db.getAll('logs');
-        const map: Record<string, DailyLog> = {};
-        for (const item of allLogs) {
-          map[item.dateKey] = item;
-        }
-        setLogs(map);
-      } catch (err) {
-        console.error('Error loading local DB:', err);
+      await flushSyncQueue();
+      const { logs: remoteLogs, settings: remoteSettings } = await pullFromSupabase();
+
+      if (remoteLogs.length > 0) {
+        const merged: Record<string, DailyLog> = { ...map };
+        remoteLogs.forEach((l) => {
+          merged[l.date_key] = l;
+        });
+        setLogsMap(merged);
       }
 
-      // 3. Sync queue & pull latest settings from Supabase
-      syncOfflineQueue();
-      const remoteSettings = await fetchSettingsFromSupabase();
       if (remoteSettings) {
-        setPricePerLiter(remoteSettings.price_per_liter);
+        setPricePerLiter(Number(remoteSettings.price_per_liter));
         setPriceInput(String(remoteSettings.price_per_liter));
         setMilkType(remoteSettings.milk_type);
-        localStorage.setItem('milksub_price', String(remoteSettings.price_per_liter));
-        localStorage.setItem('milksub_type', remoteSettings.milk_type);
       }
     }
 
     init();
 
-    const handleOnline = () => syncOfflineQueue();
+    const handleOnline = () => {
+      flushSyncQueue();
+    };
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, []);
 
-  // Update selected quantity when switching dates
-  useEffect(() => {
-    if (currentLog && currentLog.status === 'delivered') {
-      setSelectedQty(currentLog.qty);
-    }
-  }, [dateKey, currentLog]);
+  const currentDateKey = formatDateKey(selectedDate);
+  const currentLog = logsMap[currentDateKey];
 
-  const changeDate = (offsetDays: number) => {
-    const next = new Date(selectedDate);
-    next.setDate(next.getDate() + offsetDays);
-    setSelectedDate(next);
+  // Sync displayed quantity button when changing dates
+  useEffect(() => {
+    if (currentLog && currentLog.qty > 0) {
+      setSelectedQty(Number(currentLog.qty));
+    }
+  }, [currentDateKey, currentLog]);
+
+  const changeDateBy = (days: number) => {
+    setSelectedDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() + days);
+      return next;
+    });
   };
 
-  const handleSavePrice = async () => {
+  const handleStatusClick = async (status: 'delivered' | 'leave') => {
+    const newLog: DailyLog = {
+      date_key: currentDateKey,
+      customer_id: CUSTOMER_ID,
+      qty: status === 'delivered' ? selectedQty : 0,
+      status,
+      updated_at: new Date().toISOString(),
+    };
+
+    setLogsMap((prev) => ({
+      ...prev,
+      [currentDateKey]: newLog,
+    }));
+
+    await saveLocalLog(newLog);
+    flushSyncQueue();
+
+    // Auto-advance to the next day after brief visual confirmation
+    setTimeout(() => {
+      changeDateBy(1);
+    }, 250);
+  };
+
+  const handleSaveSettings = async (newPrice: number, newMilkType: string) => {
+    const updated: MilkSettings = {
+      customer_id: CUSTOMER_ID,
+      price_per_liter: newPrice,
+      milk_type: newMilkType,
+      updated_at: new Date().toISOString(),
+    };
+    setPricePerLiter(newPrice);
+    setMilkType(newMilkType);
+    await saveLocalSettings(updated);
+    flushSyncQueue();
+  };
+
+  const handlePriceSubmit = () => {
     const parsed = parseFloat(priceInput);
     if (!isNaN(parsed) && parsed > 0) {
-      setPricePerLiter(parsed);
-      localStorage.setItem('milksub_price', String(parsed));
-      await saveSettingsToSupabase(parsed, milkType);
+      handleSaveSettings(parsed, milkType);
     } else {
       setPriceInput(String(pricePerLiter));
     }
     setIsEditingPrice(false);
   };
 
-  const handleMilkTypeChange = async (newType: string) => {
-    setMilkType(newType);
-    localStorage.setItem('milksub_type', newType);
-    await saveSettingsToSupabase(pricePerLiter, newType);
-  };
+  // Monthly calculations + Quantity Breakdown with Dates
+  const monthlySummary = useMemo(() => {
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const prefix = `${year}-${month}-`;
 
-  const handleLogStatus = async (status: 'delivered' | 'leave') => {
-    const entry: DailyLog = {
-      dateKey,
-      qty: status === 'delivered' ? selectedQty : 0,
-      status,
-    };
+    const monthLogs = Object.values(logsMap).filter((l) =>
+      l.date_key.startsWith(prefix)
+    );
 
-    // Instant UI update
-    setLogs((prev) => ({ ...prev, [dateKey]: entry }));
+    const deliveredLogs = monthLogs.filter((l) => l.status === 'delivered');
+    const leaveDays = monthLogs.filter((l) => l.status === 'leave').length;
+    const totalMilk = deliveredLogs.reduce((sum, l) => sum + Number(l.qty), 0);
+    const totalAmount = totalMilk * pricePerLiter;
 
-    // Save locally + queue for Supabase sync
-    try {
-      const db = await getLocalDB();
-      const tx = db.transaction(['logs', 'syncQueue'], 'readwrite');
-      await tx.objectStore('logs').put(entry);
-      await tx.objectStore('syncQueue').put(entry);
-      await tx.done;
-
-      syncOfflineQueue();
-    } catch (err) {
-      console.error('Failed to save log:', err);
+    // Group delivered logs by quantity -> sorted list of day numbers
+    const grouped: Record<string, number[]> = {};
+    for (const log of deliveredLogs) {
+      const key = String(Number(log.qty));
+      const dayNum = parseInt(log.date_key.split('-')[2], 10);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(dayNum);
     }
-  };
 
-  // Swipe handlers
+    const qtyBreakdown = Object.entries(grouped)
+      .map(([qtyStr, days]) => {
+        const qty = Number(qtyStr);
+        const sortedDays = days.sort((a, b) => a - b);
+        return {
+          qty,
+          days: sortedDays,
+          totalLiters: Number((qty * sortedDays.length).toFixed(2)),
+        };
+      })
+      .sort((a, b) => a.qty - b.qty);
+
+    return {
+      deliveredDays: deliveredLogs.length,
+      leaveDays,
+      totalMilk: Number(totalMilk.toFixed(2)),
+      totalAmount: Math.round(totalAmount),
+      qtyBreakdown,
+    };
+  }, [logsMap, selectedDate, pricePerLiter]);
+
+  // Month View calendar days
+  const calendarDays = useMemo(() => {
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const cells: Array<{ day: number | null; dateKey?: string }> = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      cells.push({ day: null });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(year, month, d);
+      cells.push({ day: d, dateKey: formatDateKey(dt) });
+    }
+    return cells;
+  }, [selectedDate]);
+
+  // Touch swipe handlers
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
@@ -165,287 +222,290 @@ export default function MilkSubPage() {
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const diff = e.changedTouches[0].clientX - touchStartX.current;
-    if (diff > 50) changeDate(-1); // Swipe right -> yesterday
-    if (diff < -50) changeDate(1); // Swipe left -> tomorrow
+    if (diff > 50) {
+      changeDateBy(-1); // Swipe right -> yesterday
+    } else if (diff < -50) {
+      changeDateBy(1); // Swipe left -> tomorrow
+    }
     touchStartX.current = null;
   };
 
-  // Calculate monthly summary for the currently viewed month
-  const currentMonthPrefix = `${selectedDate.getFullYear()}-${String(
-    selectedDate.getMonth() + 1
-  ).padStart(2, '0')}`;
-
-  const monthLogs = Object.values(logs).filter((log) =>
-    log.dateKey.startsWith(currentMonthPrefix)
-  );
-
-  const deliveredDays = monthLogs.filter((l) => l.status === 'delivered').length;
-  const leaveDays = monthLogs.filter((l) => l.status === 'leave').length;
-  const totalLiters = monthLogs.reduce(
-    (sum, l) => (l.status === 'delivered' ? sum + Number(l.qty) : sum),
-    0
-  );
-  const totalAmount = totalLiters * pricePerLiter;
-
-  const monthName = selectedDate.toLocaleDateString('en-GB', {
-    month: 'long',
-    year: 'numeric',
-  });
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center py-8 px-4 text-slate-800">
-      {/* Top Month View Toggle */}
-      <div className="w-full max-w-md mb-4 flex justify-start">
-        <button
-          onClick={() => setShowMonthView(!showMonthView)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-600 font-medium text-sm hover:bg-blue-100 transition"
-        >
-          <span>📅</span>
-          <span>{showMonthView ? 'Day View' : 'Month View'}</span>
-        </button>
-      </div>
-
-      {/* Main Card */}
-      <div
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-slate-100">
-          <div className="flex justify-between items-start gap-2">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Sunil Lavhale</h1>
-            </div>
-
-            {/* Editable Price + Milk Type Dropdown */}
-            <div className="flex flex-col items-end gap-1.5">
-              {isEditingPrice ? (
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold text-slate-600">₹</span>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={priceInput}
-                    onChange={(e) => setPriceInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSavePrice()}
-                    autoFocus
-                    className="w-16 px-2 py-1 text-sm font-semibold border border-blue-400 rounded-lg focus:outline-none text-right"
-                  />
-                  <button
-                    onClick={handleSavePrice}
-                    className="px-2 py-1 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Save
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    setPriceInput(String(pricePerLiter));
-                    setIsEditingPrice(true);
-                  }}
-                  title="Tap to edit price per liter"
-                  className="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition flex items-center gap-1"
-                >
-                  <span>₹{pricePerLiter} / L</span>
-                  <span className="text-xs text-slate-400">✎</span>
-                </button>
-              )}
-
-              <select
-                value={milkType}
-                onChange={(e) => handleMilkTypeChange(e.target.value)}
-                className="text-xs font-medium text-slate-500 bg-transparent border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-blue-400 cursor-pointer"
-              >
-                {MILK_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Date Navigation */}
-          <div className="mt-4 flex items-center justify-center gap-6">
-            <button
-              onClick={() => changeDate(-1)}
-              className="p-2 text-slate-500 hover:text-slate-900 transition"
-              aria-label="Previous day"
-            >
-              ◀
-            </button>
-            <span className="text-base font-semibold text-slate-800 min-w-[160px] text-center">
-              {formatDisplayDate(selectedDate)}
-            </span>
-            <button
-              onClick={() => changeDate(1)}
-              className="p-2 text-slate-500 hover:text-slate-900 transition"
-              aria-label="Next day"
-            >
-              ▶
-            </button>
-          </div>
+    <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-start py-8 px-4">
+      <div className="w-full max-w-md">
+        {/* Top Month View Pill */}
+        <div className="mb-3 flex justify-start">
+          <button
+            onClick={() => setShowMonthView((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition"
+          >
+            <span>📅</span>
+            <span>{showMonthView ? 'Back to Daily View' : 'Month View'}</span>
+          </button>
         </div>
 
-        {/* Status Banner */}
-        {currentLog && (
-          <div
-            className={`py-2.5 px-4 text-center text-sm font-semibold ${
-              currentLog.status === 'delivered'
-                ? 'bg-blue-50 text-blue-700'
-                : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {currentLog.status === 'delivered'
-              ? `Logged: ${currentLog.qty}L Delivered`
-              : 'Logged: On Leave'}
-          </div>
-        )}
+        {/* Main Card */}
+        <div
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="p-5 border-b border-gray-100">
+            <div className="flex items-start justify-between gap-2">
+              <h1 className="text-xl font-bold text-gray-900">Sunil Lavhale</h1>
 
-        {/* Body */}
-        {showMonthView ? (
-          <div className="p-6">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
-              {monthName} Logs
-            </h2>
-            {monthLogs.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-6">
-                No entries logged for {monthName}.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {monthLogs
-                  .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-                  .map((log) => (
-                    <div
-                      key={log.dateKey}
+              <div className="flex flex-col items-end gap-1.5">
+                {isEditingPrice ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={priceInput}
+                      onChange={(e) => setPriceInput(e.target.value)}
+                      onBlur={handlePriceSubmit}
+                      onKeyDown={(e) => e.key === 'Enter' && handlePriceSubmit()}
+                      autoFocus
+                      className="w-16 px-2 py-0.5 text-xs font-semibold border border-blue-400 rounded-full text-center focus:outline-none"
+                    />
+                    <button
+                      onClick={handlePriceSubmit}
+                      className="text-xs font-semibold text-blue-600"
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsEditingPrice(true)}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 transition"
+                  >
+                    <span>₹{pricePerLiter} / L</span>
+                    <span>✏️</span>
+                  </button>
+                )}
+
+                <select
+                  value={milkType}
+                  onChange={(e) => handleSaveSettings(pricePerLiter, e.target.value)}
+                  className="text-xs text-gray-600 bg-white border border-gray-200 rounded-full px-2.5 py-1 focus:outline-none focus:border-blue-400"
+                >
+                  {MILK_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Date Navigator */}
+            <div className="mt-5 flex items-center justify-center gap-6">
+              <button
+                onClick={() => changeDateBy(-1)}
+                className="p-1.5 text-gray-500 hover:text-gray-900 transition"
+                aria-label="Previous day"
+              >
+                ◀
+              </button>
+              <span className="text-sm font-bold text-gray-900 min-w-[140px] text-center">
+                {formatDisplayDate(selectedDate)}
+              </span>
+              <button
+                onClick={() => changeDateBy(1)}
+                className="p-1.5 text-gray-500 hover:text-gray-900 transition"
+                aria-label="Next day"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+
+          {showMonthView ? (
+            /* Month View Grid */
+            <div className="p-5">
+              <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] font-semibold text-gray-400 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                  <div key={d}>{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1.5">
+                {calendarDays.map((cell, idx) => {
+                  if (!cell.day || !cell.dateKey) {
+                    return <div key={idx} className="h-12" />;
+                  }
+                  const log = logsMap[cell.dateKey];
+                  const isSelected = cell.dateKey === currentDateKey;
+                  let bgClass = 'bg-gray-50 text-gray-700 border-gray-200';
+                  if (log?.status === 'delivered') {
+                    bgClass = 'bg-green-50 text-green-800 border-green-300';
+                  } else if (log?.status === 'leave') {
+                    bgClass = 'bg-red-50 text-red-700 border-red-200';
+                  }
+
+                  return (
+                    <button
+                      key={cell.dateKey}
                       onClick={() => {
-                        const [y, m, d] = log.dateKey.split('-').map(Number);
+                        const [y, m, d] = cell.dateKey!.split('-').map(Number);
                         setSelectedDate(new Date(y, m - 1, d));
                         setShowMonthView(false);
                       }}
-                      className="flex justify-between items-center p-3 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer transition"
+                      className={`h-12 rounded-lg border flex flex-col items-center justify-center text-xs transition ${bgClass} ${
+                        isSelected ? 'ring-2 ring-blue-500' : ''
+                      }`}
                     >
-                      <span className="text-sm font-medium text-slate-700">
-                        {log.dateKey}
-                      </span>
-                      <span
-                        className={`text-sm font-semibold ${
-                          log.status === 'delivered'
-                            ? 'text-green-600'
-                            : 'text-red-500'
+                      <span className="font-bold">{cell.day}</span>
+                      {log?.status === 'delivered' && (
+                        <span className="text-[10px] font-semibold">{log.qty}L</span>
+                      )}
+                      {log?.status === 'leave' && (
+                        <span className="text-[10px] font-semibold">✕</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* Daily View Body */
+            <div className="p-5 space-y-5">
+              {/* Quantity Selector */}
+              <div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">
+                  Select Quantity
+                </p>
+                <div className="grid grid-cols-5 gap-2">
+                  {QUANTITIES.map((qty) => {
+                    const active = selectedQty === qty;
+                    return (
+                      <button
+                        key={qty}
+                        onClick={() => setSelectedQty(qty)}
+                        className={`py-2.5 rounded-xl text-sm font-bold border transition ${
+                          active
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                            : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
                         }`}
                       >
-                        {log.status === 'delivered' ? `${log.qty} L` : 'Leave'}
-                      </span>
-                    </div>
-                  ))}
+                        {qty}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-6 space-y-6">
-            {/* Quantity Selector */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                Select Quantity
-              </p>
-              <div className="grid grid-cols-5 gap-2">
-                {QUANTITIES.map((qty) => (
+
+              {/* Status Buttons */}
+              <div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">
+                  Status
+                </p>
+                <div className="grid grid-cols-2 gap-3">
                   <button
-                    key={qty}
-                    onClick={() => setSelectedQty(qty)}
-                    className={`py-3 rounded-xl font-bold text-base border transition ${
-                      selectedQty === qty
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    onClick={() => handleStatusClick('delivered')}
+                    className={`py-3.5 rounded-xl text-sm font-bold transition ${
+                      currentLog?.status === 'delivered'
+                        ? 'bg-green-600 text-white shadow-sm'
+                        : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
                     }`}
                   >
-                    {qty}
+                    ✓ Delivered
                   </button>
-                ))}
+                  <button
+                    onClick={() => handleStatusClick('leave')}
+                    className={`py-3.5 rounded-xl text-sm font-bold transition ${
+                      currentLog?.status === 'leave'
+                        ? 'bg-red-600 text-white shadow-sm'
+                        : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    ✕ Leave
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {/* Status Buttons */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                Status
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => handleLogStatus('delivered')}
-                  className="py-4 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-base shadow-sm transition active:scale-95"
-                >
-                  ✓ Delivered
-                </button>
-                <button
-                  onClick={() => handleLogStatus('leave')}
-                  className="py-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-base transition active:scale-95"
-                >
-                  ✕ Leave
-                </button>
-              </div>
-            </div>
-
-            {/* Monthly Total Button */}
-            <div className="pt-2 border-t border-slate-100">
+              {/* Monthly Total Toggle Button */}
               <button
-                onClick={() => setShowTotalCard(!showTotalCard)}
-                className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm transition active:scale-95"
+                onClick={() => setShowMonthlyTotal((prev) => !prev)}
+                className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition"
               >
-                {showTotalCard ? 'Hide Monthly Total' : `Total (${monthName})`}
+                {showMonthlyTotal ? 'Hide Monthly Total' : 'Show Monthly Total'}
               </button>
 
-              {showTotalCard && (
-                <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Milk Type</span>
-                    <span className="font-semibold text-slate-800">{milkType}</span>
+              {/* Monthly Summary Card */}
+              {showMonthlyTotal && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-2.5 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Milk Type</span>
+                    <span className="font-bold text-gray-900">{milkType}</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Delivered Days</span>
-                    <span className="font-semibold text-green-700">
-                      {deliveredDays} days
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Delivered Days</span>
+                    <span className="font-bold text-green-600">
+                      {monthlySummary.deliveredDays} days
                     </span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Leave Days</span>
-                    <span className="font-semibold text-red-600">
-                      {leaveDays} days
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Leave Days</span>
+                    <span className="font-bold text-red-600">
+                      {monthlySummary.leaveDays} days
                     </span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Total Milk Taken</span>
-                    <span className="font-semibold text-slate-800">
-                      {totalLiters} L
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Total Milk Taken</span>
+                    <span className="font-bold text-gray-900">
+                      {monthlySummary.totalMilk} L
                     </span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Rate</span>
-                    <span className="font-semibold text-slate-800">
+
+                  {/* Quantity Breakdown + Exact Dates */}
+                  {monthlySummary.qtyBreakdown.length > 0 && (
+                    <div className="pt-2 border-t border-gray-200 space-y-1.5">
+                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                        Quantity Breakdown
+                      </p>
+                      {monthlySummary.qtyBreakdown.map(({ qty, days, totalLiters }) => (
+                        <div
+                          key={qty}
+                          className="rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-xs"
+                        >
+                          <div className="flex justify-between font-semibold text-gray-800">
+                            <span>
+                              {qty} L × {days.length}{' '}
+                              {days.length === 1 ? 'day' : 'days'}
+                            </span>
+                            <span>{totalLiters} L</span>
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            Dates: {days.join(', ')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex justify-between pt-1">
+                    <span className="text-gray-500">Rate</span>
+                    <span className="font-bold text-gray-900">
                       ₹{pricePerLiter} / L
                     </span>
                   </div>
-                  <div className="pt-2 mt-2 border-t border-slate-200 flex justify-between items-center text-base font-bold text-slate-900">
-                    <span>Total Amount</span>
-                    <span className="text-blue-600">
-                      ₹{totalAmount.toLocaleString('en-IN')}
+                  <div className="flex justify-between pt-2 border-t border-gray-200 text-base">
+                    <span className="font-bold text-gray-900">Total Amount</span>
+                    <span className="font-bold text-blue-600">
+                      ₹{monthlySummary.totalAmount.toLocaleString('en-IN')}
                     </span>
                   </div>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Footer Hint */}
-        <div className="py-3 bg-slate-50 border-t border-slate-100 text-center text-xs text-slate-400">
-          Swipe right for yesterday
+          {/* Footer Hint */}
+          <div className="py-3 bg-gray-50 border-t border-gray-100 text-center text-xs text-gray-400">
+            Swipe right for yesterday
+          </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
